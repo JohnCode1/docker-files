@@ -1,0 +1,8 @@
+services:
+  uptime-kuma:
+    container_name: ${KUMACONTAINER}
+    image: louislam/uptime-kuma:${KUMAVERSION}
+    volumes:
+      - ${KUMADATA}:/app/data
+    ports:
+      - ${KUMAPORTOUT}:${KUMAPORTIN}

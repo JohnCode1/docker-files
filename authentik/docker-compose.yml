@@ -1,0 +1,84 @@
+#Warning I don't use this container might be outdated check there docs if running into issues
+services:
+  postgresql:
+    env_file:
+    - .env
+    environment:
+      POSTGRES_DB: ${AUTHENTIKDBNAME}
+      POSTGRES_PASSWORD: ${AUTHENTIKDBPASS}
+      POSTGRES_USER: ${AUTHENTIKDBUSER}
+    healthcheck:
+      interval: 30s
+      retries: 5
+      start_period: 20s
+      test:
+      - CMD-SHELL
+      - pg_isready -d $${AUTHENTIKDBNAME} -U $${AUTHENTIKDBUSER}
+      timeout: 5s
+    image: ${AUTHENTIKDBIMAGE}
+    restart: unless-stopped
+    volumes:
+    - ${AUTHENTIKDATABASEDATA}:/var/lib/postgresql/data
+  redis:
+    command: --save 60 1 --loglevel warning
+    healthcheck:
+      interval: 30s
+      retries: 5
+      start_period: 20s
+      test:
+      - CMD-SHELL
+      - redis-cli ping | grep PONG
+      timeout: 3s
+    image: ${AUTHENTIKREDISIMAGE}
+    restart: unless-stopped
+    volumes:
+    - ${AUTHENTIKREDISDATA}:/data
+  server:
+    command: server
+    depends_on:
+      postgresql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    env_file:
+    - .env
+    environment:
+      AUTHENTIK_POSTGRESQL__HOST: ${AUTHENTIKDBHOST}
+      AUTHENTIK_POSTGRESQL__NAME: ${AUTHENTIKDBNAME}
+      AUTHENTIK_POSTGRESQL__PASSWORD: ${AUTHENTIKDBPASS}
+      AUTHENTIK_POSTGRESQL__USER: ${AUTHENTIKDBUSER}
+      AUTHENTIK_REDIS__HOST: ${AUTHENTIKREDISHOST}
+      AUTHENTIK_SECRET_KEY: ${AUTHENTIK_SECRET_KEY:?secret key required}
+    image: ${AUTHENTIK_IMAGE:-ghcr.io/goauthentik/server}:${AUTHENTIK_TAG:-2025.8.4}
+    ports:
+    - ${AUTHENTIKPORT}:${AUTHENTIKPORT}
+    - ${AUTHENTIKHTTPSPORT}:${AUTHENTIKHTTPSPORT}
+    restart: unless-stopped
+    volumes:
+    - ${AUTHENTIKMEDIADATA}:/media
+    - ${AUTHENTIKTEMPELATES}:/templates
+  worker:
+    command: worker
+    depends_on:
+      postgresql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    env_file:
+    - .env
+    environment:
+      AUTHENTIK_POSTGRESQL__HOST: ${AUTHENTIKDBHOST}
+      AUTHENTIK_POSTGRESQL__NAME: ${AUTHENTIKDBNAME}
+      AUTHENTIK_POSTGRESQL__PASSWORD: ${AUTHENTIKDBPASS}
+      AUTHENTIK_POSTGRESQL__USER: ${AUTHENTIKDBUSER}
+      AUTHENTIK_REDIS__HOST: ${AUTHENTIKREDISHOST}
+      AUTHENTIK_SECRET_KEY: ${AUTHENTIK_SECRET_KEY:?secret key required}
+    image: ${AUTHENTIK_IMAGE:-ghcr.io/goauthentik/server}:${AUTHENTIK_TAG:-2025.8.4}
+    restart: unless-stopped
+    user: root
+    volumes:
+    - /var/run/docker.sock:/var/run/docker.sock
+    - ${AUTHENTIKMEDIADATA}:/media
+    - ${AUTHENTIKCERTS}:/certs
+    - ${AUTHENTIKTEMPELATES}:/templates
+

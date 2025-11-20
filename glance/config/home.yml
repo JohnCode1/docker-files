@@ -1,0 +1,661 @@
+#Recommend starting glance first then making changes, if you make an error while shutdown it won't start while incorrect
+#if you make a incorrect change it won't be reflected till fixed recommend making small changes
+#if change is correct the logs will reflect and refreshing glance will show change
+- name: Home
+  # Optionally, if you only have a single page you can hide the desktop navigation for a cleaner look
+  hide-desktop-navigation: true
+  columns:
+#Widgets small size left hand side
+    - size: small
+      widgets:
+        - type: search
+          search-engine: duckduckgo
+          new-tab: yes
+
+        - type: calendar
+          first-day-of-week: monday
+
+        - type: custom-api
+          title: Air Quality
+          cache: 10m
+          url: https://api.waqi.info/feed/geo:${LAT};${LON}/?token=${AIR_API_KEY}
+          template: |
+            {{ $aqi := printf "%03s" (.JSON.String "data.aqi") }}
+            {{ $aqiraw := .JSON.String "data.aqi" }}
+            {{ $updated := .JSON.String "data.time.iso" }}
+            {{ $humidity := .JSON.String "data.iaqi.h.v" }}
+            {{ $ozone := .JSON.String "data.iaqi.o3.v" }}
+            {{ $pm25 := .JSON.String "data.iaqi.pm25.v" }}
+            {{ $pressure := .JSON.String "data.iaqi.p.v" }}
+
+            <div class="flex justify-between">
+              <div class="size-h5">
+                {{ if le $aqi "050" }}
+                  <div class="color-positive">Good air quality</div>
+                {{ else if le $aqi "100" }}
+                  <div class="color-primary">Moderate air quality</div>
+                {{ else }}
+                  <div class="color-negative">Bad air quality</div>
+                {{ end }}
+              </div>
+            </div>
+
+            <div class="color-highlight size-h2">AQI: {{ $aqiraw }}</div>
+            <div style="border-bottom: 1px solid; margin-block: 10px;"></div>
+
+            <div class="margin-block-2">
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+
+                <div>
+                  <div class="size-h3 color-highlight">{{ $humidity }}%</div>
+                  <div class="size-h6">HUMIDITY</div>
+                </div>
+
+                <div>
+                  <div class="size-h3 color-highlight">{{ $ozone }} μg/m³</div>
+                  <div class="size-h6">OZONE</div>
+                </div>
+
+                <div>
+                  <div class="size-h3 color-highlight">{{ $pm25 }} μg/m³</div>
+                  <div class="size-h6">PM2.5</div>
+                </div>
+
+                <div>
+                  <div class="size-h3 color-highlight">{{ $pressure }} hPa</div>
+                  <div class="size-h6">PRESSURE</div>
+                </div>
+
+              </div>
+
+              <div class="size-h6" style="margin-top: 10px;">Last Updated at {{ slice $updated 11 16 }}</div>
+            </div>
+#Nearby Aircraft
+        - type: custom-api
+          title: Nearby Aircraft
+          cache: 1m
+          url: https://opensky-network.org/api/states/all?lamin=${MY_LAT_MIN}&lomin=${MY_LON_MIN}&lamax=${MY_LAT_MAX}&lomax=${MY_LON_MAX}
+          template: |
+            <div class="opensky-aircraft-stats">
+              {{ $states := .JSON.Array "states" }}
+              {{ $statesCount := len $states }}
+
+              <div class="margin-block-2">
+                <div class="size-h6">AIRCRAFT NEARBY: {{ $statesCount }} </div>
+              </div>
+
+              {{ if gt $statesCount 0 }}
+                {{ $plane := index $states 0 }}
+                {{ $callsign := $plane.String "1" }}
+                {{ $icao24 := $plane.String "0" }}
+                {{ $origin := $plane.String "2" }}
+                {{ $onGround := $plane.Bool "8" }}
+
+                <div class="margin-block-2">
+                  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                    <div>
+                      <div class="color-highlight size-h3">{{ if ne $callsign "" }}{{ $callsign }}{{ else }}{{ $icao24 }}{{ end }}</div>
+                      <div class="size-h6">CALLSIGN</div>
+                    </div>
+                    <div>
+                      <div class="color-highlight size-h3 text-truncate" style="max-width: 100%;">{{ if ne $origin "" }}{{ $origin }}{{ else }}-{{ end }}</div>
+                      <div class="size-h6">ORIGIN</div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="margin-block-2">
+                  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                    <div>
+                      {{ $altitude := $plane.Float "7" }}
+                      <div class="color-highlight size-h3">{{ if and (not $onGround) ($altitude | ne 0.0) }}{{ $altitude | printf "%.0f" }}m{{ else }}-{{ end }}</div>
+                      <div class="size-h6">ALTITUDE</div>
+                    </div>
+                    <div>
+                      {{ $speed := $plane.Float "9" }}
+                      <div class="color-highlight size-h3">{{ if and (not $onGround) ($speed | ne 0.0) }}{{ $speed | printf "%.0f" }}m/s{{ else }}-{{ end }}</div>
+                      <div class="size-h6">SPEED</div>
+                    </div>
+                  </div>
+                </div>
+              {{ end }}
+            </div>
+#Proxmox Stats
+        - type: custom-api
+          title: Proxmox-VE Stats
+          cache: 1m
+          url: https://${PROXMOXVE_URL}/api2/json/cluster/resources
+          allow-insecure: true
+          headers:
+            Accept: application/json
+            Authorization: PVEAPIToken=${PROXMOXVE_KEY}
+          template: |
+            <div class="flex flex-column gap-5">
+              <div class="flex justify-between text-center">
+                <div>
+                  {{ $nodes_online := len (.JSON.Array "data.#(type==\"node\")#|#(status==\"online\")#") }}
+                  {{ $nodes_total := len (.JSON.Array "data.#(type==\"node\")#") }}
+                  <div class="color-highlight size-h3">{{ $nodes_online }}/{{ $nodes_total }}</div>
+                  <div class="size-h5 uppercase">Node</div>
+                </div>
+                <div>
+                  {{ $lxc_running := len (.JSON.Array "data.#(type==\"lxc\")#|#(status==\"running\")#|#(template==0)#") }}
+                  {{ $lxc_total := len (.JSON.Array "data.#(type==\"lxc\")#|#(template==0)#") }}
+                  <div class="color-highlight size-h3">{{ $lxc_running }}/{{ $lxc_total }}</div>
+                  <div class="size-h5 uppercase">LXC</div>
+                </div>
+                <div>
+                  {{ $qemu_running := len (.JSON.Array "data.#(type==\"qemu\")#|#(status==\"running\")#|#(template==0)#") }}
+                  {{ $qemu_total := len (.JSON.Array "data.#(type==\"qemu\")#|#(template==0)#") }}
+                  <div class="color-highlight size-h3">{{ $qemu_running }}/{{ $qemu_total }}</div>
+                  <div class="size-h5 uppercase">VM</div>
+                </div>
+                <div>
+                    {{ $storage_available := len (.JSON.Array "data.#(type==\"storage\")#|#(status==\"available\")#") }}
+                    {{ $storage_total := len (.JSON.Array "data.#(type==\"storage\")#") }}
+                    <div class="color-highlight size-h3">{{ $storage_available }}/{{ $storage_total }}</div>
+                    <div class="size-h5 uppercase">Storage</div>
+                </div>
+              </div>
+            </div>
+#Random Fact
+        - type: custom-api
+          title: Random Fact
+          cache: 3h
+          url: https://uselessfacts.jsph.pl/api/v2/facts/random
+          template: |
+            <p class="size-h4 color-paragraph">{{ .JSON.String "text" }}</p>
+#Should i deploy graphic
+        - type: custom-api
+          hide-header: true
+          title: Should I deploy today
+          # cache: 1h
+          url: https://shouldideploy.today/api?tz=US%2FCentral
+          method: GET
+          template: |
+            <div class="deploy-card {{ if .JSON.Bool "shouldideploy" }}deploy-yes{{ else }}deploy-no{{ end }}">
+              <style>
+                .deploy-card {
+                  width: 100%;
+                  max-width: unset;
+                  margin: 0;
+                  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                  transition: transform 0.2s ease, box-shadow 0.2s ease;
+                  border-radius: 12px;
+                  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+                  padding: 24px 20px 18px 20px;
+                  text-align: left;
+                }
+                .deploy-card.deploy-yes {
+                  background: #9FC87E;
+                }
+                .deploy-card.deploy-no {
+                  background: #FF3F33;
+                }
+                .deploy-card h1 {
+                  font-size: 24px;
+                  margin: 0 0 16px;
+                  line-height: 1.3;
+                  color: #FFE6E1;
+                }
+                .deploy-message {
+                  font-size: 20px;
+                  font-weight: 600;
+                  margin: 12px 0 8px 0;
+                  color: #232634;
+                }
+                .deploy-date {
+                  font-size: 14px;
+                  color: #232634;
+                  margin-bottom: 4px;
+                }
+                .deploy-tz {
+                  font-size: 13px;
+                  color: #075B5E;
+                }
+                @media (max-width: 600px) {
+                  .deploy-card {
+                    padding: 16px;
+                  }
+                  .deploy-card h1 {
+                    font-size: 20px;
+                  }
+                  .deploy-message {
+                    font-size: 16px;
+                  }
+                }
+              </style>
+              <h1>Should I deploy today?</h1>
+              <div class="deploy-message">{{ .JSON.String "message" }}</div>
+              <div class="deploy-tz">Timezone: {{ .JSON.String "timezone" }}</div>
+            </div>
+#Center full widgets
+    - size: full
+      widgets:
+
+        - type: bookmarks
+          groups:
+            - title: SERVER
+              color: 60 70 50
+              links:
+                - title: AMP
+                  url: ${AMPURL}
+                - title: Authentik
+                  url: ${AUTHENTIKURL}
+                - title: Invoice Ninja 
+                  url: ${INVOICENINJAURL}
+                - title: Kasm
+                  url: ${KASMURL}
+                - title: Metabase
+                  url: ${METABASEURL}
+                - title: Uptime Kuma
+                  url: ${UPTIMEKUMAURL}
+                - title: n8n
+                  url: ${N8NURL}
+                - title: Laptop Server
+                  url: ${LAPTOPSERVERURL}
+                - title: Automatic 1111
+                  url: ${AUTOMATICURL}
+                - title: NetAlert
+                  url: ${NETALERTURL}
+                - title: Beszel
+                  url: ${BESZELURL}
+                - title: OpenWebUI
+                  url: ${OPENWEBUIURL}
+                - title: Graylog
+                  url: ${GRAYLOGURL}
+                - title: Netdata Desktop
+                  url: ${NETDATADESKTOPURL}
+                - title: Netdata Server
+                  url: ${NETDATASERVERURL}
+                - title: SPEEDTEST
+                  url: ${SPEEDTESTURL}
+                - title: WAZUH
+                  url: ${WAZUHURL}
+                - title: BackUp Server
+                  url: ${BACKUPSERVERURL}
+                - title: Netdata
+                  url: ${NETDATAURL}
+                - title: Pfsense
+                  url: ${PFSENSEURL}
+                - title: Server
+                  url: ${SERVERURL}
+                - title: BackUp Server
+                  url: ${BACKUPSERVERURL}
+                - title: Chatter Box
+                  url: ${CHATTERBOXURL}
+#Another Collumn
+            - title: Bookmarks
+              color: 10 70 50
+              links:
+                - title: Github
+                  url: https://github.com/
+                - title: Wikipedia
+                  url: https://en.wikipedia.org/
+                - title: ${BANKNAME}
+                  url: ${BANKURL} 
+                - title: YouTube
+                  url: https://www.youtube.com/
+# Shows Containers running
+        - type: docker-containers
+          hide-by-default: false
+          containers:
+            wishlist:
+              name: wishlist
+              url: ${WISHLISTURL}
+              icon: sh:wishlist
+            guacamole_compose:
+              name: SSH
+              url: ${APPACHEURL}
+              icon: di:apache
+            guacd_compose:
+              name: SSH Databasae
+              url: ${APPACHEURL}
+              icon: di:apache
+              hide: true
+            postgres_guacamole_compose:
+              name: SSH PostGres
+              url: ${APPACHEURL}
+              icon: di:apache
+              hide: true
+            netalertx_prod:
+              name: NetAlert
+              url: ${NETALERTURL}
+              icon: di:netalertx
+            firefly_iii_core:
+              name: Budget
+              url: ${FIREFLYURL}
+              icon: di:firefly
+            firefly_iii_db:
+              name: Budget db
+              url: ${FIREFLYURL}
+              icon: di:firefly
+              hide: true
+            firefly_iii_importer:
+              name: Budget importer
+              url: ${FIREFLIMPORTERURL}
+              icon: di:firefly
+            firefly_iii_cron:
+              name: Budget cron
+              url: ${FIREFLYURL}
+              icon: di:firefly
+              hide: true
+            snappy-snappymail-1:
+              name: Mail
+              url: ${MAILURL}
+              icon: di:snappymail-light 
+            snappy-php-fpm-exporter-1:
+              name: Mail php
+              url: ${MAILURL}
+              icon: sh:snappymail    
+              hide: true   
+            ollama:
+              name: AI
+              url: ${OLLAMAURL}
+              icon: sh:ollama           
+            open-webui:
+              name: Open Web UI
+              url: ${OLLAMAURL}
+              icon: sh:open-webui
+              hide: true   
+            webui-docker-auto-1:
+              name: Open Web UI Docker Auto
+              url: ${OLLAMAURL}
+              icon: sh:open-webui
+              hide: true     
+            webui-docker-download-1:
+              name: Open Web UI Docker Download
+              url: ${OLLAMAURL}
+              icon: sh:open-webui
+              hide: true         
+            wud:
+              name: Docker Update
+              url: ${WUDURL}
+              icon: sh:wud          
+            dozzle-dozzle-1:
+              name: Docker logs
+              url: ${DOZZLEURL}
+              icon: sh:dozzle 
+            jellyfin:
+              name: Stream
+              icon: sh:jellyfin
+              url: ${JELLYFINURL}
+            metube:
+              name: youtube
+              url: ${METUBEURL}
+              icon: sh:metube
+            freshrss:
+              name: News
+              icon: sh:freshrss
+              url: ${FRESHRSSURL}
+            nginx-proxy-manager:
+              name: Proxy
+              url: ${NGINXURL}
+              icon: sh:nginx
+            immich_machine_learning:
+              name: Photos_ML
+              icon: sh:immich
+              url: ${IMMICHURL}
+              hide: true
+            immich_server:
+              name: Photos
+              icon: sh:immich
+              url: ${IMMICHURL}
+            immich_postgres:
+              name: Photos_postgres
+              icon: sh:immich
+              url: ${IMMICHURL}
+              hide: true
+            immich_redis:
+              name: Photos_redis
+              icon: sh:immich
+              url: ${IMMICHURL}
+              hide: true
+            ittools:
+              name: ItTools
+              icon: sh:it-tools
+              url: ${ITTOOLSURL}
+            cyberchef-cyberchef-1:
+              name: CyberChef
+              icon: sh:cyberchef
+              url: ${CYBERCHEFURL}
+            karakeep-web-1:
+              name: Bookmarks
+              icon: sh:karakeep
+              url: ${KARAKEEPURL}
+            karakeep-meilisearch-1:
+              name: Karakeep-melisearch
+              icon: sh:karakeep
+              url: ${KARAKEEPURL}
+              hide: true
+            karakeep-chrome-1:
+              name: Karakeep-chrome
+              icon: sh:karakeep
+              url: ${KARAKEEPURL}
+              hide: true
+            jellyseerr:
+              name: JellySeer
+              icon: sh:jellyseerr
+              url: ${JELLYSEERURL}
+            gluetun:
+              name: VPN
+              icon: sh:gluetun
+            glance:
+              name: Glance
+              icon: sh:glance
+              hide: true
+            deunhealth:
+              name: VPN Health Monitor
+              icon: sh:uptime-monitor
+            reactiveresume-chrome-1:
+              name: Reactive Resume Chrome
+              icon: di:reactive-resume
+              url: ${REACTIVERESUMEURL} 
+              hide: true
+            reactiveresume-postgres-1:
+              name: Reactive Resume Postgres
+              icon: di:reactive-resume
+              url: ${REACTIVERESUMEURL}     
+              hide: true
+            reactiveresume-minio-1:
+              name: Reactive Resume Miniio
+              icon: di:reactive-resume
+              url: ${REACTIVERESUMEURL}     
+              hide: true
+            reactiveresume-app-1:
+              name: Reactive Resume 
+              icon: di:reactive-resume
+              url: ${REACTIVERESUMEURL}  
+#Random Astronomy pictures
+        - type: custom-api
+          title: Astronomy Picture of the Day
+          cache: 1d
+          url: https://api.nasa.gov/planetary/apod?api_key=${NASA_API_KEY}
+          headers:
+            Accept: application/json
+          template: |
+            {{- if eq (.JSON.String "media_type") "image" -}}
+              <div style="display:flex; flex-direction:column; align-items:center; width:100%; padding:8px; box-sizing:border-box;">
+                <!-- Clickable title -->
+                <p class="color-primary" style="margin:0 0 8px; text-align:center;">
+                  <a 
+                    href="https://apod.nasa.gov/apod/astropix.html" 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    style="color: inherit; text-decoration: none;"
+                  >
+                    {{ .JSON.String "title" }}
+                  </a>
+                </p>
+
+                <!-- Image -->
+                <img
+                  src="{{ .JSON.String "url" }}"
+                  alt="{{ .JSON.String "title" }}"
+                  style="max-width:100%; height:auto; display:block; border-radius:4px;"
+                />
+
+                <!-- Explanation dropdown -->
+                <details style="width:100%; margin-top:12px;">
+                  <summary class="color-highlight size-h5" style="cursor:pointer;">
+                    Show Explanation
+                  </summary>
+                  <p class="color-highlight size-h5" style="margin-top:8px; text-align:left; line-height:1.4;">
+                    {{ .JSON.String "explanation" }}
+                  </p>
+                </details>
+              </div>
+            {{- else -}}
+              <p class="color-negative" style="text-align:center;">
+                No image available today.
+              </p>
+            {{- end }}
+#Random Pictures of animals
+        - type: custom-api
+          height: 200px
+          title: Random Cat
+          cache: 2m
+          url: https://cataas.com/cat?json=true
+          template: |
+            <img src="{{ .JSON.String "url" }}"></img>
+        - type: custom-api
+          height: 200px
+          title: Random Dog
+          cache: 2m
+          url: https://dog.ceo/api/breeds/image/random
+          template: |
+            <img src="{{ .JSON.String "message" }}"></img>
+        - type: custom-api
+          height: 200px
+          title: Random Duck
+          cache: 2m
+          url: https://random-d.uk/api/v2/random
+          template: |
+            <img src="{{ .JSON.String "url" }}"></img>
+        - type: custom-api
+          height: 200px
+          title: Random Fox
+          cache: 2m
+          url: https://randomfox.ca/floof/?ref=public_apis&utm_medium=website
+          template: |
+            <img src="{{ .JSON.String "image" }}"></img>
+        - type: custom-api
+          height: 200px
+          title: Random Rabbit
+          cache: 2m
+          url: https://animals.maxz.dev/api/rabbit/random
+          template: |
+            <img src="{{ .JSON.String "image" }}"></img>
+        - type: custom-api
+          height: 200px
+          title: Random Capybara
+          cache: 2m
+          url: https://animals.maxz.dev/api/capybara/random
+          template: |
+            <img src="{{ .JSON.String "image" }}"></img>
+#Small Widgets on right hand side
+    - size: small
+      widgets:
+        - type: weather
+          location: ${WEATHERLOCATION}
+          units: imperial
+          hour-format: 12h # alternatively "24h"
+          hide-location: true
+        - type: custom-api
+          title: Trending Repositories
+          cache: 24h 
+          url: 'https://api.ossinsight.io/v1/trends/repos/?period=past_3_months&language=All'
+          template: |
+            <ul class="list list-gap-10 collapsible-container" data-collapse-after="3">
+              {{ range .JSON.Array "data.rows"}}
+                <li>
+                  <a class="color-primary-if-not-visited" href="https://github.com/{{ .String "repo_name" }}">{{ .String "repo_name" }}</a> 
+                  <ul class="list-horizontal-text">
+                      <li class="color-highlight"> {{.String "primary_language"}} </li>
+
+                      <li style="display: flex; align-items: center;gap: 4px;">
+                        {{ .Int "stars" }}
+                        <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" fill="currentColor" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                          <path d="M3.612 15.443c-.386.198-.824-.149-.746-.592l.83-4.73L.173 6.765c-.329-.314-.158-.888.283-.95l4.898-.696L7.538.792c.197-.39.73-.39.927 0l2.184 4.327 4.898.696c.441.062.612.636.282.95l-3.522 3.356.83 4.73c.078.443-.36.79-.746.592L8 13.187l-4.389 2.256z"/>
+                        </svg>
+                      </li>
+
+                      <li style="display: flex; align-items: center;gap: 4px;">
+                        {{ .Int "forks" }}
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+                          <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+                          <circle cx="12" cy="18" r="2" />
+                          <circle cx="7" cy="6" r="2" />
+                          <circle cx="17" cy="6" r="2" />
+                          <path d="M7 8v2a2 2 0 0 0 2 2h6a2 2 0 0 0 2 -2v-2" />
+                          <path d="M12 12l0 4" />
+                        </svg>
+                      </li>
+
+                      <li style="display: flex; align-items: center;gap: 4px;">
+                        {{ .Int "pull_requests" }}
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+                          <circle cx="6" cy="6" r="3"></circle>
+                          <circle cx="18" cy="18" r="3"></circle>
+                          <path d="M13 6h3a2 2 0 0 1 2 2v7"></path>
+                          <line x1="6" y1="9" x2="6" y2="21"></line>
+                        </svg>
+                      </li>
+
+                  </ul>
+                  <ul class="list collapsible-container">
+                    <li style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" class="color-subdue">
+                      Contributors: {{ .String "contributor_logins"}}
+                    </li>
+                    <li>
+                      {{ .String "description" }}
+                    </li>
+                  </ul>
+                </li>
+              {{ end }}
+            </ul>
+
+        - type: markets
+          markets:
+            - symbol: SPY
+              name: S&P 500
+              chart-link: https://www.tradingview.com/chart/?symbol=SPY
+              symbol-link: https://www.google.com/search?tbm=nws&q=SPY
+            - symbol: BTC-USD
+              name: Bitcoin
+              chart-link: https://www.tradingview.com/chart/?symbol=BTC-USD
+              symbol-link: https://www.google.com/search?tbm=nws&q=BTC-USD
+            - symbol: NVDA
+              name: NVIDIA
+              chart-link: https://www.tradingview.com/chart/?symbol=NVDA
+              symbol-link: https://www.google.com/search?tbm=nws&q=NVDA
+            - symbol: AAPL
+              name: Apple
+              chart-link: https://www.tradingview.com/chart/?symbol=AAPL
+              symbol-link: https://www.google.com/search?tbm=nws&q=AAPL
+            - symbol: MSFT
+              name: Microsoft
+              chart-link: https://www.tradingview.com/chart/?symbol=MSFT
+              symbol-link: https://www.google.com/search?tbm=nws&q=MSFT
+            - symbol: TSLA
+              name: Tesla
+              chart-link: https://www.tradingview.com/chart/?symbol=TSLA
+              symbol-link: https://www.google.com/search?tbm=nws&q=TSLA
+            - symbol: AMZN
+              name: Amazon
+              chart-link: https://www.tradingview.com/chart/?symbol=AMZN
+              symbol-link: https://www.google.com/search?tbm=nws&q=AMZN
+            - symbol: GOOGL
+              name: Alphabet
+              chart-link: https://www.tradingview.com/chart/?symbol=GOOGL
+              symbol-link: https://www.google.com/search?tbm=nws&q=GOOGL
+            - symbol: GOOG
+              name: Alphabet Class C
+              chart-link: https://www.tradingview.com/chart/?symbol=GOOG
+              symbol-link: https://www.google.com/search?tbm=nws&q=GOOG
+#Clock Widget
+#        - type: clock
+ #         hour-format: 12h
+  #        timezones:
+   #         - timezone: ${TIMEZONE}
+    #          label: Central

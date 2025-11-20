@@ -1,0 +1,103 @@
+#WARNING: I don't use this container so it might be outdated
+#At the time I did verify it will run with this config and checked for DNS leaks to learn
+#Recommend Updating to latest versions after running
+#If changing versions might have to read the documents for that container
+#Glueten can be picky check out there github if not using PIA. It took me about 20 tries to get it to run with PIA.
+
+##You can change the ips and network name but make sure you change all of them
+networks:
+  servarrnetwork:
+    name: servarrnetwork
+    ipam:
+      config:
+        - subnet: 172.39.0.0/24 #Can change this to any lan ip not currently being used
+
+services:
+  # I am using PIA
+  gluetun:
+    image: qmcgaw/gluetun
+    container_name: gluetun
+    cap_add:
+      - NET_ADMIN
+    devices:
+    # If running on an LXC see Techhuts Homelab guide in his media section on github
+      - /dev/net/tun:/dev/net/tun
+    networks:
+      servarrnetwork: # Can change this to any ip configured under your subnet above. There are IP calculators if curious more about what ips you have in your subnet
+        ipv4_address: 172.39.0.2 #Can change to IP in subnet
+    ports:
+      - ${FIREWALL_VPN_INPUT_PORTS}:${FIREWALL_VPN_INPUT_PORTS} #This must be open for PIA to work
+      - 8080:8080 # qbittorrent web interface
+      - 6881:6881 # qbittorrent torrent port
+      - 6789:6789 # nzbget
+    volumes:
+      - ./gluetun:/gluetun
+    # Make a '.env' file in the same directory.
+    env_file:
+      - .env
+    healthcheck:
+      test: ping -c 1 www.google.com || exit 1
+      interval: 20s
+      timeout: 10s
+      retries: 5
+    restart: unless-stopped
+
+  qbittorrent:
+    image: lscr.io/linuxserver/qbittorrent:5.1.2 #Use wud or check there github for latest version
+    container_name: qbittorrent
+    restart: unless-stopped
+    labels:
+      - deunhealth.restart.on.unhealthy=true
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+      - WEBUI_PORT=8080 # must match "qbittorrent web interface" port number in gluetun's service above
+      - TORRENTING_PORT=${FIREWALL_VPN_INPUT_PORTS}
+    volumes:
+      - ./qbittorrent:/config #Can change to where you want your config to be
+      - /data:/data #Put this where your data will be downloaded to
+    depends_on:
+      gluetun:
+        condition: service_healthy
+        restart: true
+    network_mode: service:gluetun
+    healthcheck:
+      test: ping -c 1 www.google.com || exit 1
+      interval: 60s
+      retries: 3
+      start_period: 20s
+      timeout: 10s
+
+  # See the 'qBittorrent Stalls with VPN Timeout' section for more information.
+  deunhealth:
+    image: qmcgaw/deunhealth
+    container_name: deunhealth
+    network_mode: "none"
+    environment:
+      - LOG_LEVEL=info
+      - HEALTH_SERVER_ADDRESS=127.0.0.1:9999
+      - TZ=${TZ}
+    restart: always
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+
+  nzbget:
+    image: lscr.io/linuxserver/nzbget:version-v25.3
+    container_name: nzbget
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - ./nzbget:/config
+      - /data:/data
+    depends_on:
+      gluetun:
+        condition: service_healthy
+        restart: true
+    restart: unless-stopped
+    network_mode: service:gluetun
+
+

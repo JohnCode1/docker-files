@@ -1,0 +1,12 @@
+#Warning I don't use this container might be outdated check there docs if running into issues
+#This can be complex but offers alot of flexibility
+apiVersion: 1
+
+datasources:
+- name: Prometheus
+  type: prometheus
+  url: http://prometheus:9090
+  isDefault: true
+  access: proxy
+  editable: true
+

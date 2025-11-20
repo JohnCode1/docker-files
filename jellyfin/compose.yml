@@ -1,0 +1,51 @@
+services:
+  jellyfin:
+    # Name of image and version number
+    image: lscr.io/linuxserver/jellyfin:${JELLYFINVERSION}
+    # Name of container
+    container_name: ${JELLYFINCONTAINER}
+    environment:
+      - PUID=${USER}
+      - PGID=${GROUP}
+      # Timezone
+      - TZ=${TZ}
+      # What url Jellyfin will run on this is optional
+      - JELLYFIN_PublishedServerUrl=${JELLYFINURL}
+    devices:
+      # For intel QuickSync
+      - /dev/dri:/dev/dri
+    volumes:
+      # Where Jellyfin will store the data and config files only change the path on the left
+      - ${JELLYFINCONFIGDATA}:/config
+      - ${JELLYFINDATA}:/data
+    ports:
+      - ${WEBPORT}:${WEBPORT}
+      - ${SERVICEPORT}:${SERVICEPORT}/udp
+      # Client Discovery
+      - ${CLIENTPORT}:${CLIENTPORT}/udp
+    # This will allow the container to restart if it goes down or you shut your server down
+    restart: unless-stopped
+    env_file:
+      - .env
+#    deploy:
+#      resources:
+#        reservations:
+#          devices:
+#            - driver: nvidia
+#              count: all
+#              capabilities: [gpu]
+  # The same for below
+  jellyseerr:
+    container_name: ${JELLYSEERRCONTAINER}
+    image: fallenbagel/jellyseerr:${JELLYSEERRVERSION}
+    environment:
+      - PUID=${USER}
+      - PGID=${GROUP}
+      - TZ=${TZ}
+    volumes:
+      - ${JELLYSEERRDATA}:/app/config
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - ${JELLYSEERPORT}:${JELLYSEERPORT}

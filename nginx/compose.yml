@@ -1,0 +1,26 @@
+services:
+  proxy:
+    image: 'docker.io/jc21/nginx-proxy-manager:${NGINXVERSION}'
+    container_name: nginx-proxy-manager
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      - DISABLE_IPV6=true
+    volumes:
+      - ${NGINXDATA}:/data
+      - ${NGINXLETSENCRYPTDATA}:/etc/letsencrypt
+
+  ddns:
+    image: favonia/cloudflare-ddns:latest
+    container_name: cloudflare-ddns
+    # network_mode: host # This bypasses network isolation and makes IPv6 easier (optional; see below)
+    restart: unless-stopped
+    user: "${UID}:${PGID}" # Run the updater with specific user and group IDs (in that order).
+    read_only: true # Make the container filesystem read-only (optional but recommended)
+    cap_drop: [all] # Drop all Linux capabilities (optional but recommended)
+    security_opt: [no-new-privileges:true] # Another protection to restrict superuser privileges (optional but recommended)
+    environment:
+      - CLOUDFLARE_API_TOKEN=${CLOUDFLAREKEY}
+      - DOMAINS=${DOMAINNAME},${SUBDOMAINNAME}
+      - PROXIED=true
+      - IP6_PROVIDER=none

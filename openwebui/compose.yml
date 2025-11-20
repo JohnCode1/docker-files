@@ -1,0 +1,15 @@
+services:
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:${OPENWEBUIVERSION}
+    container_name: ${OPENWEBUICONTAINER}
+    volumes:
+        - ${OLLAMADATA}:/app/backend/data
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+        - OLLAMA_BASE_URL=${OLLAMAURL}
+        - AUTOMATIC1111_BASE_URL=${AUTOMATICURL}
+    ports:
+      - ${OPENWEBUIPORT}:${OPENWEBUIPORT}
+

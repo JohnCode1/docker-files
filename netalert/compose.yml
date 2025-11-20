@@ -1,0 +1,12 @@
+services:
+  netalertx_prod:
+    container_name: ${NETALERTCONTAINERNAME}
+    image: "jokobsk/netalertx:${NETALERTVERSION}"
+    network_mode: ${NETWORKMODE}
+#    volumes:
+#      - ${APP_DATA_LOCATION}/netalertx_prod/config:/app/config
+#      - ${APP_DATA_LOCATION}/netalertx_prod/db:/app/db
+    environment:
+      - TZ=${TZ}
+      - PORT=${NETALERTPORT}
+      - APP_CONF_OVERRIDE={"SCAN_SUBNETS":"['${MAINLAN} --interface=eth1', '${GUESTLAN} --interface=eth2']","GRAPHQL_PORT":"${GRAPHQLPORT}"}

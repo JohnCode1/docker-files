@@ -1,0 +1,36 @@
+services:
+  metabase:
+    image: metabase/metabase:${METABASEVERSION}
+    container_name: ${METABASECONTAINER}
+    hostname: ${METABASEHOSTNAME}
+    volumes:
+      - ${METABASEDATA}:/dev/random:ro
+    ports:
+      - ${METABASEPORTOUT}:${METABASEPORTIN}
+    environment:
+      MB_DB_TYPE: ${METABASEDBTYPE}
+      MB_DB_DBNAME: ${METABASEDBNAME}
+      MB_DB_PORT: ${METABASEDBPORT}
+      MB_DB_USER: ${METABASEDBUSER}
+      MB_DB_PASS: ${METABASEDBPASS}
+      MB_DB_HOST: ${METABASEDBHOST}
+    networks:
+      - ${METABASENETWORK}
+    healthcheck:
+      test: curl --fail -I http://localhost:3000/api/health || exit 1
+      interval: 15s
+      timeout: 5s
+      retries: 5
+  postgres:
+    image: ${METABASEDBIMAGE}
+    container_name: ${METABASEDBCONTAINER}
+    hostname: ${METABASEHOSTNAME}
+    environment:
+      POSTGRES_USER: ${METABASEDBUSER}
+      POSTGRES_DB: ${METABASEDBNAME}
+      POSTGRES_PASSWORD: ${METABASEDBPASS}
+    networks:
+      - ${METABASENETWORK}
+networks:
+  metanet1:
+    driver: ${METABASENETWORKDRIVER}

@@ -1,0 +1,14 @@
+services:
+  glance:
+    container_name: glance
+    image: glanceapp/glance:${GLANCEVERSION}
+    restart: unless-stopped
+    volumes:
+      - ${GLANCECONFIG}:/app/config
+      - ${GLANCEASSETS}:/app/assets
+      - ${TIMEDATA}:/etc/localtime:ro
+      # Optionally, also mount docker socket if you want to use the docker containers widget
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    env_file: .env
+    ports:
+      - ${GLANCEPORT}:${GLANCEPORT}
